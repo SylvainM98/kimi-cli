@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import dataclasses
+import os
 import sys
 import time
 import warnings
@@ -54,6 +55,10 @@ def enable_logging(debug: bool = False, *, redirect_stderr: bool = True) -> None
     # NOTE: stderr redirection is implemented by swapping the process-level fd=2 (dup2).
     # That can hide Click/Typer error output during CLI startup, so some entrypoints delay
     # installing it until after critical initialization succeeds.
+    log_level = os.environ.get("LOG_LEVEL", "").upper()
+    log_level_file = "TRACE" if debug else "INFO"
+    if log_level:
+        log_level_file = log_level
     logger.remove()  # Remove default stderr handler
     logger.enable("kimi_cli")
     if debug:
@@ -61,7 +66,7 @@ def enable_logging(debug: bool = False, *, redirect_stderr: bool = True) -> None
     logger.add(
         get_share_dir() / "logs" / "kimi.log",
         # FIXME: configure level for different modules
-        level="TRACE" if debug else "INFO",
+        level=log_level_file,
         format=(
             "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
             "{name}:{function}:{line} | {extra[sid]} - {message}"
@@ -69,6 +74,16 @@ def enable_logging(debug: bool = False, *, redirect_stderr: bool = True) -> None
         rotation="06:00",
         retention="10 days",
     )
+    # When LOG_LEVEL is explicitly set, also log to stderr for live debugging.
+    if log_level:
+        logger.add(
+            sys.stderr,
+            level=log_level,
+            format=(
+                "{time:HH:mm:ss.SSS} | {level: <8} | "
+                "{name}:{function}:{line} - {message}"
+            ),
+        )
     logger.configure(extra={"sid": ""}, patcher=_patch_session_id)
     if redirect_stderr:
         redirect_stderr_to_logger()
